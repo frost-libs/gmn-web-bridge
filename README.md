@@ -1,10 +1,10 @@
 # gmn-web-bridge
 
-An OpenAI-compatible bridge to a signed-in [Gemini](https://gemini.google.com) web session. One Python process listens on `127.0.0.1:8091` and calls Gemini directly. There is no second proxy and no third-party web client inside the image.
+An OpenAI-compatible bridge to a signed-in [Gemini](https://gemini.google.com) web session. One Python process listens on `127.0.0.1:8091` and calls Gemini directly.
 
 This project is not affiliated with Google. It uses your own browser session. You are responsible for complying with Google's terms.
 
-The license is MIT. Copyright (c) 2026 Anonymous Software Foundation.
+The license is MIT. Copyright (c) 2026 Frost Libs
 
 ## What is stored
 
