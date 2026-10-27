@@ -1,0 +1,9 @@
+{
+  "reject_prefix": "alias-",
+  "models": {
+    "alias-pro": {
+      "id": "gemini-3.1-pro",
+      "description": "Pro"
+    }
+  }
+}

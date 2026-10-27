@@ -1,0 +1,29 @@
+{
+  "reject_prefix": "pf-",
+  "models": {
+    "pf-3.8-flash": {
+      "id": "gemini-3.8-flash",
+      "description": "Short edits (3.8 Flash)"
+    },
+    "pf-3.1-pro": {
+      "id": "gemini-3.1-pro",
+      "description": "Architecture and agent work (3.1 Pro). A free account can still be answered as Flash."
+    },
+    "pf-4-argon": {
+      "id": "gemini-4-argon",
+      "description": "Complex tasks (4 Argon)"
+    },
+    "pf-3.5-flash-thinking": {
+      "id": "gemini-3.5-flash-thinking",
+      "description": "Longest output, deep thinking (3.5 Flash Thinking)"
+    },
+    "pf-3.5-flash-thinking-lite": {
+      "id": "gemini-3.5-flash-thinking-lite",
+      "description": "Adaptive thinking (3.5 Flash Thinking Lite)"
+    },
+    "pf-3.5-flash-lite": {
+      "id": "gemini-3.5-flash-lite",
+      "description": "Fastest chat (3.5 Flash-Lite)"
+    }
+  }
+}

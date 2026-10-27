@@ -1,0 +1,31 @@
+[project]
+name = "gmn-web-bridge"
+version = "0.1.0"
+description = "OpenAI-compatible bridge to a signed-in Gemini web session"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+dependencies = ["httpx>=0.25"]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.6"]
+
+[project.scripts]
+gmn-web-bridge = "gmn_web_bridge.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 140
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]

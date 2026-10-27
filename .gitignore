@@ -1,0 +1,10 @@
+.rebuild-from
+__pycache__/
+*.py[cod]
+.venv/
+.env
+secrets.env
+cookie.txt
+*.egg-info/
+dist/
+build/
