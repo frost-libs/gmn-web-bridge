@@ -3,7 +3,17 @@
 # process environment and are never printed.
 set -eu
 
-if [ -z "${GMN_COOKIE:-}" ]; then
+mode="${GMN_MODE:-local}"
+case "$mode" in
+  local|anonymous) ;;
+  *)
+    echo "GMN_MODE must be local or anonymous." >&2
+    exit 1
+    ;;
+esac
+export GMN_MODE="$mode"
+
+if [ "$mode" != "anonymous" ] && [ -z "${GMN_COOKIE:-}" ]; then
   echo "GMN_COOKIE is required. Run scripts/gmn-secrets.sh setup, then scripts/gmn-secrets.sh up." >&2
   exit 1
 fi

@@ -36,6 +36,13 @@ def _bool(name: str, default: bool) -> bool:
     return raw.lower() not in {"0", "false", "no"}
 
 
+def _mode() -> str:
+    value = _text("GMN_MODE", "local").lower()
+    if value not in {"local", "anonymous"}:
+        raise ValueError("GMN_MODE must be local or anonymous.")
+    return value
+
+
 @dataclass(frozen=True)
 class Settings:
     host: str
@@ -54,6 +61,11 @@ class Settings:
     default_model: str
     summary_model: str
     send_model_header: bool
+    mode: str
+    upstream_proxy: str
+    log_requests: bool
+    cors: bool
+    fetch_image_urls: bool
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -81,4 +93,9 @@ class Settings:
             default_model=_text("GMN_DEFAULT_MODEL", "gemini-3.8-flash"),
             summary_model=_text("GMN_SUMMARY_MODEL", "gemini-3.5-flash-lite"),
             send_model_header=_bool("GMN_SEND_MODEL_HEADER", False),
+            mode=_mode(),
+            upstream_proxy=_text("GMN_UPSTREAM_PROXY"),
+            log_requests=_bool("GMN_LOG_REQUESTS", False),
+            cors=_bool("GMN_CORS", False),
+            fetch_image_urls=_bool("GMN_FETCH_IMAGE_URLS", True),
         )

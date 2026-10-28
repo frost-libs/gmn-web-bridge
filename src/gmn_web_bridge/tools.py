@@ -65,7 +65,7 @@ def parse_tool_calls(text: str) -> tuple[str, list[dict[str, Any]] | None]:
     return prose.rstrip(), calls
 
 
-def render_conversation(messages: list[Any], tools: Any) -> tuple[str, list[tuple[bytes, str, str]]]:
+def render_conversation(messages: list[Any], tools: Any) -> tuple[str, list[tuple[bytes | str, str, str]]]:
     """Fold history into one prompt. Images are returned separately for upload."""
     images: list[tuple[bytes, str, str]] = []
     blocks: list[str] = []
@@ -76,7 +76,7 @@ def render_conversation(messages: list[Any], tools: Any) -> tuple[str, list[tupl
     return "\n\n".join(block for block in blocks if block), images
 
 
-def _render_message(message: Any, images: list[tuple[bytes, str, str]]) -> str:
+def _render_message(message: Any, images: list[tuple[bytes | str, str, str]]) -> str:
     if not isinstance(message, dict):
         return str(message)
     role = str(message.get("role") or "user")
@@ -106,7 +106,7 @@ def _calls_as_fence(tool_calls: Any) -> str:
     return f"{FENCE}\n{body}\n```"
 
 
-def _content_text(content: Any, images: list[tuple[bytes, str, str]]) -> str:
+def _content_text(content: Any, images: list[tuple[bytes | str, str, str]]) -> str:
     if content is None:
         return ""
     if isinstance(content, str):
@@ -131,18 +131,57 @@ def _content_text(content: Any, images: list[tuple[bytes, str, str]]) -> str:
     return str(content)
 
 
-def _image_bytes(part: dict[str, Any]) -> tuple[bytes, str, str] | None:
-    url = None
-    if isinstance(part.get("image_url"), dict):
-        url = part["image_url"].get("url")
-    elif isinstance(part.get("image_url"), str):
-        url = part["image_url"]
-    elif part.get("type") in ("input_image", "image") and isinstance(part.get("url"), str):
-        url = part["url"]
-    if not isinstance(url, str) or not url.startswith("data:"):
-        return None
-    header, _, data = url.partition(",")
-    mime = header[5:].split(";", 1)[0] or "application/octet-stream"
-    raw = base64.b64decode(data) if ";base64" in header else unquote_to_bytes(data)
+def _image_name(mime: str) -> str:
     extension = mime.split("/")[-1] or "bin"
-    return raw, mime, f"image.{extension}"
+    return f"image.{extension}"
+
+
+def _decode_data_url(url: str, mime_hint: str) -> tuple[bytes, str, str] | None:
+    header, _, data = url.partition(",")
+    mime = header[5:].split(";", 1)[0] or mime_hint or "application/octet-stream"
+    try:
+        raw = base64.b64decode(data, validate=True) if ";base64" in header else unquote_to_bytes(data)
+    except (ValueError, TypeError):
+        return None
+    return raw, mime, _image_name(mime)
+
+
+def _image_bytes(part: dict[str, Any]) -> tuple[bytes | str, str, str] | None:
+    url = None
+    mime_hint = ""
+    image_url = part.get("image_url")
+    if isinstance(image_url, dict):
+        candidate = image_url.get("url")
+        url = candidate if isinstance(candidate, str) else None
+        hint = image_url.get("mime_type") or image_url.get("mimeType")
+        if isinstance(hint, str):
+            mime_hint = hint
+    elif isinstance(image_url, str):
+        url = image_url
+    if part.get("type") in ("input_image", "image"):
+        if url is None and isinstance(part.get("url"), str):
+            url = part["url"]
+        if url is None and isinstance(part.get("image_url"), str):
+            url = part["image_url"]
+        hint = part.get("mime_type") or part.get("mimeType") or part.get("media_type")
+        if isinstance(hint, str) and not mime_hint:
+            mime_hint = hint
+        raw_b64 = part.get("data") or part.get("base64")
+        if url is None and isinstance(raw_b64, str):
+            if raw_b64.startswith("data:"):
+                url = raw_b64
+            else:
+                try:
+                    raw = base64.b64decode(raw_b64, validate=True)
+                except (ValueError, TypeError):
+                    return None
+                mime = mime_hint or "image/png"
+                return raw, mime, _image_name(mime)
+    if not isinstance(url, str) or not url:
+        return None
+    if url.startswith("data:"):
+        return _decode_data_url(url, mime_hint)
+    if url.startswith(("http://", "https://")):
+        mime = mime_hint or "image/png"
+        return url, mime, _image_name(mime)
+    return None

@@ -231,6 +231,17 @@ def _indexed_tool_calls(tool_calls: Any) -> list[dict[str, Any]]:
         )
     return indexed
 
+def estimate_usage(prompt: str, completion: str) -> dict[str, int]:
+    """Rough token counts. One token is four characters, the same estimate web clients use."""
+    prompt_tokens = len(prompt) // 4
+    completion_tokens = len(completion) // 4
+    return {
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "total_tokens": prompt_tokens + completion_tokens,
+    }
+
+
 def translate_upstream_error(status: int, raw: bytes) -> tuple[int, bytes] | None:
     """Map a web or session failure to a short OpenAI error. None means pass through."""
     del status
@@ -242,6 +253,8 @@ def translate_upstream_error(status: int, raw: bytes) -> tuple[int, bytes] | Non
     if not message:
         return None
     lowered = message.lower()
+    if "set gmn_cookie" in lowered:
+        return None
     if "xsrf" in lowered or _is_session_failure(lowered):
         return 401, _openai_error(
             "Gemini session rejected the request. Refresh the cookie and the XSRF token, then run setup again."

@@ -18,7 +18,13 @@ while writing this note. Signed-out HTML does not contain `SNlM0e`.
 
 The signed-out page also exposes `https://push.clients6.google.com/upload/` and the RPC prefix `/_/BardChatUi`.
 
-`GMN_BL` overrides `cfb2h`. When it is unset, the process reads `cfb2h` from the signed-in page at startup.
+`GMN_BL` overrides `cfb2h`. When it is unset, the process reads `cfb2h` from the Gemini page on the first request.
+
+## Anonymous session
+
+`GMN_MODE=anonymous` with an empty cookie fetches `https://gemini.google.com/app` and sends no `Cookie` header. That page has `cfb2h` and `FdrFJe`. It does not have `SNlM0e`, so the POST omits `at`. The StreamGenerate URL has no `/u/<index>` prefix, and the request has no `Authorization` and no `X-Goog-AuthUser`. `GMN_AUTH_USER` and `GMN_XSRF_TOKEN` are ignored until a cookie is set.
+
+A cookie in `anonymous` mode uses the signed-in request above.
 
 ## StreamGenerate
 
@@ -97,6 +103,8 @@ The body starts with the XSSI guard `)]}'`. Later lines are either a decimal byt
 `BardErrorInfo [<n>]` in the body is a terminal upstream error. An event shaped `["e", ..., <code>]` is the same.
 
 A retry is allowed only before the first text byte is yielded. After that, a dropped connection ends the stream.
+
+HTTP 405 from StreamGenerate, before any text, means the build label is stale. Unless `GMN_BL` is set, the bridge drops the cached `cfb2h`, reads the page again (signed-in or anonymous), and retries that request once.
 
 ## Uploads
 

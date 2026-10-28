@@ -47,3 +47,24 @@ class ToolStreamTest(unittest.TestCase):
         self.assertNotIn(png, prompt)
         self.assertEqual(images[0][0], b"png")
         self.assertEqual(images[0][1], "image/png")
+
+    def test_an_https_url_and_a_base64_part_stay_out_of_the_prompt(self):
+        png = base64.b64encode(b"\x89PNG\r\n\x1a\npng").decode()
+        prompt, images = render_conversation(
+            [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image_url", "image_url": {"url": "https://example.com/a.png", "mime_type": "image/png"}},
+                        {"type": "input_image", "image_url": "https://example.com/b.jpg"},
+                        {"type": "input_image", "data": png, "mime_type": "image/png"},
+                    ],
+                }
+            ],
+            None,
+        )
+
+        self.assertNotIn("example.com", prompt)
+        self.assertEqual(images[0][0], "https://example.com/a.png")
+        self.assertEqual(images[1][0], "https://example.com/b.jpg")
+        self.assertTrue(images[2][0].startswith(b"\x89PNG"))

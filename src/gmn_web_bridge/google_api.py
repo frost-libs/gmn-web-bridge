@@ -7,6 +7,7 @@ import json
 from typing import Any
 from urllib.parse import unquote
 
+from .openai_api import estimate_usage
 from .tools import parse_tool_calls
 
 
@@ -28,7 +29,14 @@ def google_to_openai(model: str, body: dict[str, Any], stream: bool) -> dict[str
     return translated
 
 
-def google_response(text: str, tool_calls: list[dict[str, Any]] | None) -> dict[str, Any]:
+def google_response(
+    text: str,
+    tool_calls: list[dict[str, Any]] | None,
+    *,
+    prompt: str = "",
+    completion: str = "",
+    model: str = "",
+) -> dict[str, Any]:
     parts: list[dict[str, Any]] = []
     if text:
         parts.append({"text": text})
@@ -44,13 +52,21 @@ def google_response(text: str, tool_calls: list[dict[str, Any]] | None) -> dict[
             args = arguments
         parts.append({"functionCall": {"name": function.get("name"), "args": args}})
     finish = "STOP"
+    usage = estimate_usage(prompt, completion or text)
     return {
         "candidates": [
             {
                 "content": {"role": "model", "parts": parts or [{"text": ""}]},
                 "finishReason": finish,
+                "index": 0,
             }
-        ]
+        ],
+        "usageMetadata": {
+            "promptTokenCount": usage["prompt_tokens"],
+            "candidatesTokenCount": usage["completion_tokens"],
+            "totalTokenCount": usage["total_tokens"],
+        },
+        "modelVersion": model,
     }
 
 

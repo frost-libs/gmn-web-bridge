@@ -7,8 +7,13 @@
 #   gmn-secrets.sh status [--env-file PATH]
 #   gmn-secrets.sh up [--env-file PATH]
 #   gmn-secrets.sh down
+#   gmn-secrets.sh rollback [--env-file PATH]
 #   gmn-secrets.sh print [--env-file PATH]
 #   gmn-secrets.sh check [--env-file PATH]
+#
+# GMN_MODE=local (the default) requires a Gemini cookie. GMN_MODE=anonymous
+# accepts an empty cookie and talks to Gemini without a Google account.
+# The local API key is required in both modes.
 #
 # Keychain item names are "<prefix>-cookie", "<prefix>-xsrf", "<prefix>-auth-user",
 # and "<prefix>-api-key". The prefix defaults to gmn-web-bridge (GMN_KEYCHAIN_PREFIX).
@@ -21,6 +26,7 @@ set -euo pipefail
 PREFIX="${GMN_KEYCHAIN_PREFIX:-gmn-web-bridge}"
 ACCOUNT="gmn-web-bridge"
 IMAGE="gmn-web-bridge:dev"
+PREVIOUS="gmn-web-bridge:previous"
 CONTAINER="gmn-web-bridge"
 PORT="${GMN_PORT:-8091}"
 
@@ -43,7 +49,7 @@ elif [ -n "${BASH_VERSION:-}" ]; then
   fi
 fi
 if [ "$_sourced" -eq 1 ]; then
-  echo "Do not source this script. Run: ${_root}/scripts/gmn-secrets.sh setup|status|up|down|print|check" >&2
+  echo "Do not source this script. Run: ${_root}/scripts/gmn-secrets.sh setup|status|up|down|rollback|print|check" >&2
   return 1 2>/dev/null || exit 1
 fi
 
@@ -144,8 +150,80 @@ load_runtime_secrets() {
   GMN_AUTH_USER="$(read_secret "$(item auth-user)")"
 }
 
+require_mode() {
+  local mode="${GMN_MODE:-local}"
+  case "$mode" in
+    local|anonymous) printf '%s' "$mode" ;;
+    *)
+      echo "GMN_MODE must be local or anonymous." >&2
+      return 1
+      ;;
+  esac
+}
+
+container_exists() {
+  podman container exists "$CONTAINER"
+}
+
+export_runtime() {
+  local mode="$1"
+  GMN_AUTH_USER="${GMN_AUTH_USER:-0}"
+  GMN_MODE="$mode"
+  export GMN_COOKIE GMN_API_KEY GMN_XSRF_TOKEN GMN_AUTH_USER GMN_MODE
+  export GMN_TEMPORARY_CHATS="${GMN_TEMPORARY_CHATS:-true}"
+  export GMN_PORT="$PORT"
+}
+
+start_container() {
+  local image="$1"
+  local -a run_args
+  run_args=(
+    run -d
+    --name "$CONTAINER"
+    --restart unless-stopped
+    -e GMN_COOKIE
+    -e GMN_API_KEY
+    -e GMN_XSRF_TOKEN
+    -e GMN_AUTH_USER
+    -e GMN_TEMPORARY_CHATS
+    -e GMN_PORT
+    -e GMN_MODE
+  )
+  local name
+  for name in GMN_REQUEST_TIMEOUT_SEC GMN_PROMPT_CHAR_LIMIT GMN_BL GMN_UPSTREAM_PROXY GMN_LOG_REQUESTS GMN_CORS GMN_FETCH_IMAGE_URLS; do
+    if [ -n "${!name:-}" ]; then
+      run_args+=(-e "$name")
+    fi
+  done
+  if [ -n "${GMN_MODEL_ALIASES:-}" ]; then
+    run_args+=(-v "${GMN_MODEL_ALIASES}:/aliases.json:ro" -e GMN_MODEL_ALIASES=/aliases.json)
+  fi
+  if [ "${GMN_PODMAN_NETWORK:-}" = "host" ]; then
+    run_args+=(--network host -e GMN_HOST=127.0.0.1)
+  else
+    run_args+=(-p "127.0.0.1:${PORT}:${PORT}")
+  fi
+  podman "${run_args[@]}" "$image"
+  echo "Listening on http://127.0.0.1:${PORT}/v1"
+  echo "podman inspect ${CONTAINER} shows these environment values. Do not share that output."
+}
+
+secrets_ready() {
+  local mode="$1"
+  if [ -z "${GMN_API_KEY:-}" ]; then
+    echo "Secrets are missing. Run setup first." >&2
+    return 1
+  fi
+  if [ "$mode" = "local" ] && [ -z "${GMN_COOKIE:-}" ]; then
+    echo "Secrets are missing. Run setup first." >&2
+    return 1
+  fi
+}
+
 cmd_setup() {
   parse_flags "$@"
+  local mode=""
+  mode="$(require_mode)" || return 1
   local cookie="" xsrf="" auth_user="" api_key="" existing_key=""
   if [ -n "$COPY_FROM" ]; then
     if ! have_security; then
@@ -156,29 +234,36 @@ cmd_setup() {
     xsrf="$(read_secret "${COPY_FROM}-xsrf")"
     auth_user="$(read_secret "${COPY_FROM}-auth-user")"
     api_key="$(read_secret "${COPY_FROM}-api-key")"
-    if [ -z "$cookie" ] || [ -z "$api_key" ]; then
+    if [ -z "$api_key" ] || { [ -z "$cookie" ] && [ "$mode" != "anonymous" ]; }; then
       echo "Keychain prefix '${COPY_FROM}' is missing a cookie or API key." >&2
       return 1
     fi
     auth_user="${auth_user:-0}"
   else
-    printf "Gemini cookie (one line, input hidden): "
+    if [ "$mode" = "anonymous" ]; then
+      printf "Gemini cookie (one line, input hidden; empty runs without a Google account): "
+    else
+      printf "Gemini cookie (one line, input hidden): "
+    fi
     read -rs cookie
     printf '\n'
     cookie="${cookie#"${cookie%%[![:space:]]*}"}"
     cookie="${cookie%"${cookie##*[![:space:]]}"}"
     if [ -z "$cookie" ]; then
-      echo "Cookie is required" >&2
-      return 1
+      if [ "$mode" != "anonymous" ]; then
+        echo "Cookie is required" >&2
+        return 1
+      fi
+    else
+      case "$cookie" in
+        *SID=*|*sid=*) ;;
+        *) echo "Cookie line is missing SID." >&2; return 1 ;;
+      esac
+      case "$cookie" in
+        *SAPISID=*|*sapisid=*) ;;
+        *) echo "Cookie line is missing SAPISID." >&2; return 1 ;;
+      esac
     fi
-    case "$cookie" in
-      *SID=*|*sid=*) ;;
-      *) echo "Cookie line is missing SID." >&2; return 1 ;;
-    esac
-    case "$cookie" in
-      *SAPISID=*|*sapisid=*) ;;
-      *) echo "Cookie line is missing SAPISID." >&2; return 1 ;;
-    esac
     printf "XSRF token (optional, input hidden; empty clears it): "
     read -rs xsrf
     printf '\n'
@@ -221,7 +306,11 @@ cmd_setup() {
     echo "Stored secrets in ${ENV_FILE} (mode 600)."
   else
     have_security || { echo "macOS Keychain (security) is required, or pass --env-file." >&2; return 1; }
-    store_secret "$(item cookie)" "$cookie"
+    if [ -n "$cookie" ]; then
+      store_secret "$(item cookie)" "$cookie"
+    else
+      delete_secret "$(item cookie)"
+    fi
     if [ -n "$xsrf" ]; then
       store_secret "$(item xsrf)" "$xsrf"
     else
@@ -236,6 +325,8 @@ cmd_setup() {
 
 cmd_status() {
   parse_flags "$@"
+  local mode=""
+  mode="$(require_mode)" || return 1
   if [ -n "$ENV_FILE" ]; then
     if [ -f "$ENV_FILE" ]; then
       echo "ok: env file present"
@@ -246,7 +337,7 @@ cmd_status() {
   fi
   have_security || { echo "macOS Keychain (security) is required, or pass --env-file." >&2; return 1; }
   local missing=0 name
-  for name in cookie api-key auth-user; do
+  for name in api-key auth-user; do
     if item_present "$(item "$name")"; then
       echo "ok: Keychain item '$(item "$name")' present"
     else
@@ -254,6 +345,14 @@ cmd_status() {
       missing=1
     fi
   done
+  if item_present "$(item cookie)"; then
+    echo "ok: Keychain item '$(item cookie)' present"
+  elif [ "$mode" = "anonymous" ]; then
+    echo "note: Keychain item '$(item cookie)' absent (optional in anonymous mode)"
+  else
+    echo "missing: Keychain item '$(item cookie)'"
+    missing=1
+  fi
   if item_present "$(item xsrf)"; then
     echo "ok: Keychain item '$(item xsrf)' present"
   else
@@ -288,56 +387,50 @@ PY
 
 cmd_up() {
   parse_flags "$@"
-  require_podman
+  local mode=""
+  mode="$(require_mode)" || return 1
   load_runtime_secrets
-  if [ -z "${GMN_COOKIE:-}" ] || [ -z "${GMN_API_KEY:-}" ]; then
-    echo "Secrets are missing. Run setup first." >&2
+  secrets_ready "$mode" || return 1
+  require_podman
+  export_runtime "$mode"
+  if ! container_exists && ! port_free "$PORT"; then
+    echo "127.0.0.1:${PORT} is already in use. Refusing to start." >&2
     return 1
   fi
-  GMN_AUTH_USER="${GMN_AUTH_USER:-0}"
-  export GMN_COOKIE GMN_API_KEY GMN_XSRF_TOKEN GMN_AUTH_USER
-  export GMN_TEMPORARY_CHATS="${GMN_TEMPORARY_CHATS:-true}"
-  export GMN_PORT="$PORT"
+  if podman image exists "$IMAGE"; then
+    podman tag "$IMAGE" "$PREVIOUS"
+  fi
+  if ! podman build -t "$IMAGE" -f "${_root}/Dockerfile" "${_root}"; then
+    echo "Build failed. The running container was left in place." >&2
+    return 1
+  fi
+  podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  if ! port_free "$PORT"; then
+    echo "127.0.0.1:${PORT} is already in use. Refusing to start." >&2
+    echo "The previous image is ${PREVIOUS}. Run: ${_root}/scripts/gmn-secrets.sh rollback" >&2
+    return 1
+  fi
+  start_container "$IMAGE"
+}
+
+cmd_rollback() {
+  parse_flags "$@"
+  local mode=""
+  mode="$(require_mode)" || return 1
+  require_podman
+  if ! podman image exists "$PREVIOUS"; then
+    echo "No previous image. Nothing to roll back." >&2
+    return 1
+  fi
+  load_runtime_secrets
+  secrets_ready "$mode" || return 1
+  export_runtime "$mode"
   podman rm -f "$CONTAINER" >/dev/null 2>&1 || true
   if ! port_free "$PORT"; then
     echo "127.0.0.1:${PORT} is already in use. Refusing to start." >&2
     return 1
   fi
-
-  podman build -t "$IMAGE" -f "${_root}/Dockerfile" "${_root}"
-
-  local -a run_args
-  run_args=(
-    run -d
-    --name "$CONTAINER"
-    --restart unless-stopped
-    -e GMN_COOKIE
-    -e GMN_API_KEY
-    -e GMN_XSRF_TOKEN
-    -e GMN_AUTH_USER
-    -e GMN_TEMPORARY_CHATS
-    -e GMN_PORT
-  )
-  if [ -n "${GMN_REQUEST_TIMEOUT_SEC:-}" ]; then
-    run_args+=(-e GMN_REQUEST_TIMEOUT_SEC)
-  fi
-  if [ -n "${GMN_PROMPT_CHAR_LIMIT:-}" ]; then
-    run_args+=(-e GMN_PROMPT_CHAR_LIMIT)
-  fi
-  if [ -n "${GMN_BL:-}" ]; then
-    run_args+=(-e GMN_BL)
-  fi
-  if [ -n "${GMN_MODEL_ALIASES:-}" ]; then
-    run_args+=(-v "${GMN_MODEL_ALIASES}:/aliases.json:ro" -e GMN_MODEL_ALIASES=/aliases.json)
-  fi
-  if [ "${GMN_PODMAN_NETWORK:-}" = "host" ]; then
-    run_args+=(--network host -e GMN_HOST=127.0.0.1)
-  else
-    run_args+=(-p "127.0.0.1:${PORT}:${PORT}")
-  fi
-  podman "${run_args[@]}" "$IMAGE"
-  echo "Listening on http://127.0.0.1:${PORT}/v1"
-  echo "podman inspect ${CONTAINER} shows these environment values. Do not share that output."
+  start_container "$PREVIOUS"
 }
 
 cmd_down() {
@@ -393,10 +486,11 @@ case "$command_name" in
   status) cmd_status "$@" ;;
   up) cmd_up "$@" ;;
   down) cmd_down ;;
+  rollback) cmd_rollback "$@" ;;
   print) cmd_print "$@" ;;
   check) cmd_check "$@" ;;
   *)
-    echo "Usage: ${_root}/scripts/gmn-secrets.sh setup|status|up|down|print|check" >&2
+    echo "Usage: ${_root}/scripts/gmn-secrets.sh setup|status|up|down|rollback|print|check" >&2
     exit 1
     ;;
 esac
