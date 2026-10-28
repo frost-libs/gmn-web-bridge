@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "OpenAI-compatible bridge to a signed-in Gemini web session"
 readme = "README.md"
 license = "MIT"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = ["httpx>=0.25"]
 
 [project.optional-dependencies]

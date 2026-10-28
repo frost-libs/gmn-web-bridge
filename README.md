@@ -6,6 +6,8 @@ This project is not affiliated with Google. It uses your own browser session. Yo
 
 The license is MIT. Copyright (c) 2026 Frost Libs
 
+The container image and CI run on Python 3.13.
+
 ## What is stored
 
 | Value | Where it comes from | Keychain item |
@@ -145,6 +147,17 @@ scripts/gmn-secrets.sh rollback
 ```
 
 `rollback` starts the container again from `gmn-web-bridge:previous` with the same secrets and the same `GMN_MODE`.
+
+## Release image
+
+Publishing a GitHub release pushes `ghcr.io/<owner>/gmn-web-bridge` with two tags: the release tag, unchanged, and the full commit SHA.
+
+```text
+ghcr.io/<owner>/gmn-web-bridge:v0.1.0
+ghcr.io/<owner>/gmn-web-bridge:<commit-sha>
+```
+
+The first package GitHub creates is private. Change its visibility in the repository Packages settings if it should be pullable without a token. Running from this checkout stays `scripts/gmn-secrets.sh up`, which builds `gmn-web-bridge:dev` locally.
 
 ## Develop
 
