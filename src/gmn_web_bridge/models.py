@@ -38,8 +38,11 @@ class InvalidThink(Exception):
     """`@think=` was not an integer."""
 
 
-def resolve_model(model_name: str, default: str) -> tuple[str, ModelSpec, int]:
-    """Return `(name, spec, think_level)` for a request model id."""
+def resolve_model(model_name: str, default: str) -> tuple[str, ModelSpec, int, bool]:
+    """Return `(name, spec, think_level, fallback)` for a request model id.
+    
+    fallback is True when the requested name was unknown and substituted.
+    """
     think_override: int | None = None
     if "@think=" in model_name:
         model_name, think_str = model_name.rsplit("@think=", 1)
@@ -48,8 +51,9 @@ def resolve_model(model_name: str, default: str) -> tuple[str, ModelSpec, int]:
         except ValueError as exc:
             raise InvalidThink(think_str) from exc
     spec = MODELS.get(model_name)
+    fallback = spec is None
     if spec is None:
         model_name = default if default in MODELS else "gemini-3.8-flash"
         spec = MODELS[model_name]
     think = think_override if think_override is not None else spec.think
-    return model_name, spec, think
+    return model_name, spec, think, fallback

@@ -78,7 +78,7 @@ class GeminiClient:
         files: list[tuple[bytes | str, str, str]] | None = None,
     ) -> Iterator[str]:
         """Yield reply text. Retries only happen before the first yield."""
-        _name, spec, think = resolve_model(model_name, self.settings.default_model)
+        _name, spec, think, _fallback = resolve_model(model_name, self.settings.default_model)
         self._ensure_session()
         file_refs = self._upload_all(files or [])
         last_error: Exception | None = None

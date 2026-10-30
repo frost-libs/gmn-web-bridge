@@ -467,3 +467,52 @@ class CapabilityTest(unittest.TestCase):
         self.assertIn("GET /v1/models", logged)
         self.assertNotIn("sk-test", logged)
         self.assertNotIn("?", logged)
+
+    def test_the_request_log_shows_requested_and_resolved_model(self):
+        client = FakeClient()
+        server = _serve(_settings(log_requests=True), client)
+        port = server.server_address[1]
+        try:
+            from contextlib import redirect_stderr
+            from io import StringIO
+
+            buffer = StringIO()
+            with redirect_stderr(buffer):
+                _post(port, "/v1/chat/completions", {"model": "gemini-3.8-flash", "messages": [{"role": "user", "content": "Hi"}]})
+                deadline = time.monotonic() + 1
+                while "POST /v1/chat/completions" not in buffer.getvalue() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+            logged = buffer.getvalue()
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertIn("POST /v1/chat/completions", logged)
+        self.assertIn("gemini-3.8-flash -> gemini-3.8-flash", logged)
+        self.assertIn("mode=1", logged)
+        self.assertIn("think=4", logged)
+        self.assertNotIn("fallback", logged)
+
+    def test_the_request_log_shows_fallback_for_unknown_models(self):
+        client = FakeClient()
+        server = _serve(_settings(log_requests=True, default_model="gemini-3.5-flash-lite"), client)
+        port = server.server_address[1]
+        try:
+            from contextlib import redirect_stderr
+            from io import StringIO
+
+            buffer = StringIO()
+            with redirect_stderr(buffer):
+                _post(port, "/v1/chat/completions", {"model": "gpt-4", "messages": [{"role": "user", "content": "Hi"}]})
+                deadline = time.monotonic() + 1
+                while "POST /v1/chat/completions" not in buffer.getvalue() and time.monotonic() < deadline:
+                    time.sleep(0.01)
+            logged = buffer.getvalue()
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertIn("POST /v1/chat/completions", logged)
+        self.assertIn("gpt-4 -> gemini-3.5-flash-lite", logged)
+        self.assertIn("mode=6", logged)
+        self.assertIn("(fallback)", logged)

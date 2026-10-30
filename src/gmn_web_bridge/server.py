@@ -51,6 +51,10 @@ _COOKIE_NOTE = " Without a cookie, Gemini may answer with Flash."
 @dataclass
 class Turn:
     model: str
+    resolved: str
+    mode: int
+    think: int
+    fallback: bool
     prompt: str
     images: list[tuple[bytes | str, str, str]]
     tools: bool
@@ -80,11 +84,15 @@ class Bridge:
         model = rewritten.get("model")
         if not isinstance(model, str) or not model:
             model = self.settings.default_model
-        resolve_model(model, self.settings.default_model)
+        resolved, spec, think, fallback = resolve_model(model, self.settings.default_model)
         options = rewritten.get("stream_options")
         include_usage = isinstance(options, dict) and options.get("include_usage") is True
         return Turn(
             model=model,
+            resolved=resolved,
+            mode=spec.mode,
+            think=think,
+            fallback=fallback,
             prompt=prompt,
             images=images,
             tools=bool(rewritten.get("tools")),
@@ -97,7 +105,7 @@ class Bridge:
         return "".join(self.client.generate(prompt, self.settings.summary_model))
 
     def reply(self, turn: Turn) -> Iterator[str]:
-        yield from self.client.generate(turn.prompt, turn.model, turn.images)
+        yield from self.client.generate(turn.prompt, turn.resolved, turn.images)
 
     def models_payload(self) -> dict[str, Any]:
         data = [
@@ -205,7 +213,11 @@ def handler_class(bridge: Bridge) -> type[BaseHTTPRequestHandler]:
         def _dispatch(self, raw: bytes, invalid_body: bool = False) -> None:
             started = time.monotonic()
             self._status = 500
-            self._model = ""
+            self._requested = ""
+            self._resolved = ""
+            self._mode = 0
+            self._think = 0
+            self._fallback = False
             try:
                 self._route(raw, invalid_body)
             finally:
@@ -278,7 +290,11 @@ def handler_class(bridge: Bridge) -> type[BaseHTTPRequestHandler]:
                 self._write_json(400, _openai_error("Request body must be a JSON object."))
                 return
             turn = bridge.prepare(body)
-            self._model = turn.model
+            self._requested = turn.model
+            self._resolved = turn.resolved
+            self._mode = turn.mode
+            self._think = turn.think
+            self._fallback = turn.fallback
             completion_id = "chatcmpl-" + uuid.uuid4().hex
             if not turn.stream:
                 text = "".join(bridge.reply(turn))
@@ -354,7 +370,11 @@ def handler_class(bridge: Bridge) -> type[BaseHTTPRequestHandler]:
                 return
             stream = action == "streamGenerateContent"
             turn = bridge.prepare(google_to_openai(model, body, stream))
-            self._model = turn.model
+            self._requested = turn.model
+            self._resolved = turn.resolved
+            self._mode = turn.mode
+            self._think = turn.think
+            self._fallback = turn.fallback
             if not stream:
                 text = "".join(bridge.reply(turn))
                 prose, calls = parse_tool_calls(text) if turn.tools else (text, None)
@@ -391,7 +411,11 @@ def handler_class(bridge: Bridge) -> type[BaseHTTPRequestHandler]:
                 self._write_json(400, _openai_error("Request body must be a JSON object."))
                 return
             turn = bridge.prepare(responses_to_chat(body))
-            self._model = turn.model
+            self._requested = turn.model
+            self._resolved = turn.resolved
+            self._mode = turn.mode
+            self._think = turn.think
+            self._fallback = turn.fallback
             if not turn.prompt.strip():
                 self._write_json(400, _openai_error("empty input"))
                 return
@@ -570,8 +594,13 @@ def handler_class(bridge: Bridge) -> type[BaseHTTPRequestHandler]:
                 return
             path = self.path.split("?", 1)[0]
             elapsed = time.monotonic() - started
+            if self._requested:
+                fallback_note = " (fallback)" if self._fallback else ""
+                model_info = f"{self._requested} -> {self._resolved} mode={self._mode} think={self._think}{fallback_note}"
+            else:
+                model_info = ""
             sys.stderr.write(
-                f"{time.strftime('%H:%M:%S')} {self.command} {path} {self._status} {self._model} {elapsed:.3f}s\n"
+                f"{time.strftime('%H:%M:%S')} {self.command} {path} {self._status} {model_info} {elapsed:.3f}s\n"
             )
 
         def log_message(self, fmt: str, *args: Any) -> None:

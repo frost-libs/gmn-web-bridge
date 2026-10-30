@@ -162,10 +162,9 @@ The first package GitHub creates is private. Change its visibility in the reposi
 ## Develop
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
-.venv/bin/ruff check src tests
-PYTHONPATH=src .venv/bin/python -m unittest discover -s tests
+uv sync
+uv run ruff check src tests
+uv run python -m unittest discover -s tests
 ```
 
 [`examples/agent-rules.example.md`](examples/agent-rules.example.md) is a client rule file for a coding agent pointed at this bridge.
