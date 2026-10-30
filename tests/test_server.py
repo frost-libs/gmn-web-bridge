@@ -516,3 +516,40 @@ class CapabilityTest(unittest.TestCase):
         self.assertIn("gpt-4 -> gemini-3.5-flash-lite", logged)
         self.assertIn("mode=6", logged)
         self.assertIn("(fallback)", logged)
+
+    def test_a_think_override_reaches_the_client(self):
+        """The `@think=` suffix must survive to the client, which re-resolves it.
+
+        Regression guard: `Bridge.reply` once passed the stripped `resolved`
+        name, silently dropping every think override.
+        """
+        client = FakeClient()
+        server = _serve(_settings(), client)
+        try:
+            status, _body = _post(
+                server.server_address[1],
+                "/v1/chat/completions",
+                {"model": "gemini-3.8-flash@think=0", "messages": [{"role": "user", "content": "Hi"}]},
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(client.calls[0]["model"], "gemini-3.8-flash@think=0")
+
+    def test_a_think_override_survives_an_alias(self):
+        client = FakeClient()
+        server = _serve(_settings(), client)
+        try:
+            status, _body = _post(
+                server.server_address[1],
+                "/v1/chat/completions",
+                {"model": "gemini-3.1-pro@think=2", "messages": [{"role": "user", "content": "Hi"}]},
+            )
+        finally:
+            server.shutdown()
+            server.server_close()
+
+        self.assertEqual(status, 200)
+        self.assertEqual(client.calls[0]["model"], "gemini-3.1-pro@think=2")

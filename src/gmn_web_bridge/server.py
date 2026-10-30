@@ -105,7 +105,9 @@ class Bridge:
         return "".join(self.client.generate(prompt, self.settings.summary_model))
 
     def reply(self, turn: Turn) -> Iterator[str]:
-        yield from self.client.generate(turn.prompt, turn.resolved, turn.images)
+        # Pass the original name: it may carry an `@think=` suffix that the
+        # client re-resolves. `resolved`/`mode`/`think` are for logging only.
+        yield from self.client.generate(turn.prompt, turn.model, turn.images)
 
     def models_payload(self) -> dict[str, Any]:
         data = [
