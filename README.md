@@ -50,9 +50,11 @@ Do not `echo` `$GMN_API_KEY`.
 | --- | --- |
 | Base URL | `http://127.0.0.1:8091/v1` |
 | API key | Keychain item `gmn-web-bridge-api-key`, or `GMN_API_KEY` from the env file |
-| Model | `gemini-3.8-flash`, `gemini-3.1-pro`, `gemini-4-argon`, `gemini-3.5-flash-thinking`, `gemini-3.5-flash-thinking-lite`, `gemini-3.5-flash-lite` |
+| Model | `gemini-4-hydrogen`, `gemini-4-neon`, `gemini-4-carbon`, `gemini-3.5-flash-thinking`, `gemini-3.5-flash-thinking-lite`, `gemini-3.5-flash-lite` |
 
-An unknown model name falls back to `GMN_DEFAULT_MODEL` (`gemini-3.8-flash`). Append `@think=0` for the deepest pass and `@think=4` for the shallowest.
+`gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.6-flash`, and `gemini-3.5-flash` are aliases of 4 Hydrogen. `gemini-3.1-pro` is an alias of 4 Neon. `gemini-4-argon` is an alias of 4 Carbon.
+
+An unknown model name falls back to `GMN_DEFAULT_MODEL` (`gemini-3.8-flash`, the 4 Hydrogen slot). Append `@think=0` for the deepest pass and `@think=4` for the shallowest.
 
 Optional public ids are loaded only when `GMN_MODEL_ALIASES` points at a JSON file. [`examples/aliases.example.json`](examples/aliases.example.json) is one such file. Without that file, only the Gemini web model names above are special.
 
@@ -95,7 +97,7 @@ The wire format is described in [`docs/protocol.md`](docs/protocol.md). The buil
 
 ## Anonymous mode
 
-`GMN_MODE=anonymous` starts without a cookie. If a cookie is set, the signed-in session is used as in `local` mode. Without a cookie the bridge sends no cookie, no XSRF token, and no account path. `gemini-3.1-pro` and `gemini-4-argon` may be answered as Flash. Google may rate-limit the address. `scripts/gmn-secrets.sh setup` accepts an empty cookie in this mode. The local API key is still created and required.
+`GMN_MODE=anonymous` starts without a cookie. If a cookie is set, the signed-in session is used as in `local` mode. Without a cookie the bridge sends no cookie, no XSRF token, and no account path. `gemini-4-neon` and `gemini-4-carbon` may be answered as Hydrogen or Flash-Lite. `gemini-3.1-pro` and `gemini-4-argon` are those same slots. Google may rate-limit the address. `scripts/gmn-secrets.sh setup` accepts an empty cookie in this mode. The local API key is still created and required.
 
 Any other `GMN_MODE` value stops the process at startup. An unset value means `local`.
 

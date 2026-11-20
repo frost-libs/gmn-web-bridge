@@ -15,6 +15,7 @@ class FakeClient:
         self.calls: list[dict] = []
         self.release = threading.Event()
         self.reply = "Hi"
+        self.reply_chunks: list[str] | None = None
         self.hold = False
 
     def generate(self, prompt, model, files=None):
@@ -22,7 +23,7 @@ class FakeClient:
         if prompt.startswith("Summarize this coding conversation"):
             yield "summary of src/old.py"
             return
-        yield self.reply
+        yield from self.reply_chunks if self.reply_chunks is not None else [self.reply]
         if self.hold:
             self.release.wait(2)
 
@@ -85,6 +86,67 @@ def _post(port: int, path: str, payload: dict, stream: bool = False) -> tuple[in
 
 
 class ServerTest(unittest.TestCase):
+    def test_streamed_tool_calls_have_distinct_zero_based_indexes(self):
+        cases = [
+            ("", [{"name": "ls", "arguments": {"path": "."}}]),
+            ("Listing files.\n", [{"name": "ls", "arguments": {"path": "źródła"}}]),
+            ("", [{"name": "ls", "arguments": {}}, {"name": "read", "arguments": {"path": "README.md"}}]),
+            ("Listing both.\n", [{"name": "ls", "arguments": {"path": "a"}}, {"name": "ls", "arguments": {"path": "b"}}]),
+        ]
+        client = FakeClient()
+        server = _serve(_settings(), client)
+        try:
+            for prose, calls in cases:
+                with self.subTest(prose=prose, calls=calls):
+                    payload = calls[0] if len(calls) == 1 else calls
+                    reply = prose + "```tool_call\n" + json.dumps(payload, ensure_ascii=False) + "\n```"
+                    # Split the upstream fence and arguments across several yields.
+                    client.reply_chunks = [reply[offset : offset + 3] for offset in range(0, len(reply), 3)]
+                    status, body = _post(
+                        server.server_address[1],
+                        "/v1/chat/completions",
+                        {
+                            "model": "gemini-3.8-flash",
+                            "stream": True,
+                            "stream_options": {"include_usage": True},
+                            "tools": [{"type": "function", "function": {"name": call["name"]}} for call in calls],
+                            "messages": [{"role": "user", "content": "Use the tools"}],
+                        },
+                    )
+
+                    self.assertEqual(status, 200)
+                    frames = body.split(b"\n\n")
+                    self.assertEqual(frames[-2:], [b"data: [DONE]", b""])
+                    events = [json.loads(frame.removeprefix(b"data: ")) for frame in frames[:-2]]
+                    choices = [event["choices"][0] for event in events if event["choices"]]
+                    self.assertEqual(choices[0]["delta"], {"role": "assistant"})
+                    self.assertEqual("".join(choice["delta"].get("content", "") for choice in choices), prose)
+                    self.assertTrue(all(choice["finish_reason"] is None for choice in choices[:-1]))
+                    self.assertTrue(all("tool_calls" not in choice["delta"] for choice in choices[:-1]))
+                    self.assertEqual(choices[-1]["finish_reason"], "tool_calls")
+                    self.assertEqual(
+                        choices[-1]["delta"],
+                        {
+                            "tool_calls": [
+                                {
+                                    "index": index,
+                                    "id": f"call_{index}_{call['name']}",
+                                    "type": "function",
+                                    "function": {
+                                        "name": call["name"],
+                                        "arguments": json.dumps(call["arguments"], ensure_ascii=False),
+                                    },
+                                }
+                                for index, call in enumerate(calls)
+                            ]
+                        },
+                    )
+                    self.assertEqual(events[-1]["choices"], [])
+                    self.assertIn("total_tokens", events[-1]["usage"])
+        finally:
+            server.shutdown()
+            server.server_close()
+
     def test_stream_flushes_before_the_client_finishes(self):
         client = FakeClient()
         client.hold = True
@@ -137,6 +199,7 @@ class ServerTest(unittest.TestCase):
         message = payload["choices"][0]["message"]
         self.assertIn("Answer", message["content"])
         self.assertEqual(message["tool_calls"][0]["function"]["name"], "ls")
+        self.assertNotIn("index", message["tool_calls"][0])
         self.assertEqual(payload["choices"][0]["finish_reason"], "tool_calls")
 
     def test_google_generate_content(self):
@@ -441,8 +504,14 @@ class CapabilityTest(unittest.TestCase):
 
         payload = json.loads(received.split(b"\r\n\r\n", 1)[1])
         notes = {item["id"]: item["description"] for item in payload["data"]}
+        self.assertIn("gemini-4-hydrogen", notes)
+        self.assertIn("gemini-4-neon", notes)
+        self.assertIn("gemini-4-carbon", notes)
+        self.assertIn("Without a cookie", notes["gemini-4-neon"])
+        self.assertIn("Without a cookie", notes["gemini-4-carbon"])
         self.assertIn("Without a cookie", notes["gemini-3.1-pro"])
         self.assertIn("Without a cookie", notes["gemini-4-argon"])
+        self.assertNotIn("Without a cookie", notes["gemini-4-hydrogen"])
         self.assertNotIn("Without a cookie", notes["gemini-3.8-flash"])
 
     def test_the_request_log_omits_the_key_and_the_body(self):

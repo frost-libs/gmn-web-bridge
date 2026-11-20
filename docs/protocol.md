@@ -63,17 +63,17 @@ f.req=<json>&at=<SNlM0e>
 | 59 | request UUID |
 | 79 | mode category integer |
 
-Mode categories used by this bridge:
+Mode categories used by this bridge. On 2026-11-18 the web menu became Auto, Everyday help (4 Hydrogen), Deeper analysis (4 Neon), and, on Ultra, Code and complex work (4 Carbon). Modes 2 and 5 are not in that menu. The picker label Auto is mode 6. Mode 4 stays the older auto integer.
 
 | Integer | Menu |
 | --- | --- |
-| 1 | Fast (Flash) |
+| 1 | 4 Hydrogen (was Fast / Flash) |
 | 2 | Thinking |
-| 3 | Pro |
+| 3 | 4 Neon (was Pro) |
 | 4 | Auto |
 | 5 | Dynamic thinking |
-| 6 | Flash-Lite |
-| 8 | 4 Argon |
+| 6 | Flash-Lite (picker label Auto) |
+| 8 | 4 Carbon (was 4 Argon) |
 
 The side-channel header `x-goog-ext-525001261-jspb` is a JSON array:
 
@@ -87,14 +87,14 @@ The side-channel header `x-goog-ext-525001261-jspb` is a JSON array:
 | 15 | native thinking level: `3` when our level is 0 or 1, `2` when it is 2 or 3, `1` when it is 4 |
 | 16 | request UUID |
 
-Known hashes, from the 2026-10-14 public contract and earlier public captures:
+Known hashes, from the 2026-10-14 public contract and earlier public captures. These hashes were not recaptured from a signed-in page in this repo after the 2026-11-18 menu change. The picker id `argon` is the same slot as `95a4c0abcba24364`.
 
 | Hash | Model |
 | --- | --- |
-| `56fdd199312815e2` | 3.8 Flash |
-| `e6fa609c3fa255c0` | 3.1 Pro |
+| `56fdd199312815e2` | 4 Hydrogen (was 3.8 Flash) |
+| `e6fa609c3fa255c0` | 4 Neon (was 3.1 Pro) |
 | `cf41b0e0dd7d53e5` | 3.5 Flash-Lite |
-| `95a4c0abcba24364` | 4 Argon |
+| `95a4c0abcba24364` | 4 Carbon (was 4 Argon) |
 
 ## Response
 

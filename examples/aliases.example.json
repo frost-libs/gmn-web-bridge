@@ -1,17 +1,29 @@
 {
   "reject_prefix": "pf-",
   "models": {
+    "pf-4-hydrogen": {
+      "id": "gemini-4-hydrogen",
+      "description": "Everyday help (4 Hydrogen)"
+    },
+    "pf-4-neon": {
+      "id": "gemini-4-neon",
+      "description": "Deeper analysis (4 Neon). A free account can still be answered as Hydrogen or Flash-Lite."
+    },
+    "pf-4-carbon": {
+      "id": "gemini-4-carbon",
+      "description": "Code and complex work (4 Carbon). Listed for Ultra; other accounts can be answered as another model."
+    },
     "pf-3.8-flash": {
       "id": "gemini-3.8-flash",
-      "description": "Short edits (3.8 Flash)"
+      "description": "Short edits (4 Hydrogen)"
     },
     "pf-3.1-pro": {
       "id": "gemini-3.1-pro",
-      "description": "Architecture and agent work (3.1 Pro). A free account can still be answered as Flash."
+      "description": "Architecture and agent work (4 Neon). A free account can still be answered as Hydrogen or Flash-Lite."
     },
     "pf-4-argon": {
       "id": "gemini-4-argon",
-      "description": "Complex tasks (4 Argon)"
+      "description": "Complex tasks (4 Carbon)"
     },
     "pf-3.5-flash-thinking": {
       "id": "gemini-3.5-flash-thinking",

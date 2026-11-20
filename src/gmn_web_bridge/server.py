@@ -44,8 +44,13 @@ from .openai_api import (
 from .responses_api import completed_response, created_event, responses_to_chat
 from .tools import parse_tool_calls, render_conversation, withhold_tool_fence
 
-_COOKIE_NOTE_MODELS = {"gemini-3.1-pro", "gemini-4-argon"}
-_COOKIE_NOTE = " Without a cookie, Gemini may answer with Flash."
+_COOKIE_NOTE_MODELS = {
+    "gemini-4-neon",
+    "gemini-4-carbon",
+    "gemini-3.1-pro",
+    "gemini-4-argon",
+}
+_COOKIE_NOTE = " Without a cookie, Gemini may answer with Hydrogen or Flash-Lite."
 
 
 @dataclass
@@ -356,7 +361,8 @@ def handler_class(bridge: Bridge) -> type[BaseHTTPRequestHandler]:
             if prose:
                 self._send_chunk(completion_id, turn.model, {"content": prose}, None)
             if calls:
-                self._send_chunk(completion_id, turn.model, {"tool_calls": calls}, "tool_calls")
+                indexed_calls = [{**call, "index": index} for index, call in enumerate(calls)]
+                self._send_chunk(completion_id, turn.model, {"tool_calls": indexed_calls}, "tool_calls")
             else:
                 self._send_chunk(completion_id, turn.model, {}, "stop")
             return full
